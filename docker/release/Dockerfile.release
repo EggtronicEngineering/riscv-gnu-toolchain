@@ -1,5 +1,6 @@
 FROM ubuntu:24.04
 
+ARG TARGETARCH
 ARG INSTALL_DIR=/opt/riscv
 
 # Install deps
@@ -13,5 +14,5 @@ RUN apt update && apt -y full-upgrade && apt -y install \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
 # Install toolchain
-COPY riscv-gnu-toolchain-linux_riscv64 $INSTALL_DIR
+COPY linux_${TARGETARCH} $INSTALL_DIR
 ENV PATH="$INSTALL_DIR/bin:$PATH"

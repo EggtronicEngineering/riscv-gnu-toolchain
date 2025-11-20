@@ -12,7 +12,8 @@ variables:
   TOOLCHAIN_REF: "master"
 
   DOCKER_REPO: "eggtronicengineering/riscv-gnu-toolchain"
-  DOCKER_BUILD_IMAGE: "${DOCKER_REPO}:build"
+  LINUX_BUILDER_IMAGE: "${DOCKER_REPO}:linux-builder"
+  WINDOWS_BUILDER_IMAGE: "${DOCKER_REPO}:windows-builder"
   RELEASE_IMAGE: "registry.gitlab.com/gitlab-org/release-cli:latest"
 
   PROJECT_API_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}"
@@ -55,6 +56,13 @@ stages:
     - echo $DOCKER_AUTH_CONFIG > "$CI_PROJECT_DIR/.docker/config.json"
     - shopt -s expand_aliases
     - alias docker="docker --config \"$CI_PROJECT_DIR/.docker\""
+    - export BUILDER_NAME="ci-builder-${CI_JOB_ID}"
+    - docker buildx create --name $BUILDER_NAME --driver docker-container --bootstrap --use || docker buildx use ci-builder
+  after_script:
+    - export DOCKER_CONFIG="$CI_PROJECT_DIR/.docker"
+    - export BUILDER_NAME="ci-builder-${CI_JOB_ID}"
+    - docker buildx use default
+    - docker --config "$DOCKER_CONFIG" buildx rm $BUILDER_NAME --force || true
   tags:
     - shell
 
@@ -63,19 +71,18 @@ setup:
   extends: .dockerbashlogin
   stage: setup
   variables:
-    DOCKERFILE: ./docker/Dockerfile.cicd
-    DOCKER_BUILD_CONTEXT: ./docker
+    DOCKER_BUILD_CONTEXT: .
   only:
     changes:
-      - docker/*
+      - docker/**/*
+      - docker-bake.hcl
   script:
-    - docker build --pull --push -t $DOCKER_BUILD_IMAGE -f $DOCKERFILE $DOCKER_BUILD_CONTEXT
-
+    - docker buildx bake builders
 
 clone_tc:
   stage: setup
   image:
-    name: $DOCKER_BUILD_IMAGE
+    name: $LINUX_BUILDER_IMAGE
     docker:
       user: ctng
   variables:
@@ -96,7 +103,7 @@ clone_tc:
 .build:
   stage: build_bin
   image:
-    name: $DOCKER_BUILD_IMAGE
+    name: $LINUX_BUILDER_IMAGE
     docker:
       user: ctng
   variables:
@@ -108,26 +115,31 @@ clone_tc:
   script:
     # Move toolchain content to current directory
     - mv toolchain/** . && rm -rf toolchain
-    # Build with crosstool-NG
+    # Inject Config Tweaks
     - >
       grep -w CT_LOG_PROGRESS_BAR "$DEFCONFIG"
       && sed -Ei 's/.*(CT_LOG_PROGRESS_BAR).*/# \1 is not set/' "$DEFCONFIG"
       || echo '# CT_LOG_PROGRESS_BAR is not set' >> "$DEFCONFIG"
+    # Prepare Crosstool-NG
     - ct-ng defconfig
     - GCC_CUSTOM_LOCATION=$(eval echo $(grep CT_GCC_CUSTOM_LOCATION .config | sed 's/.*=//'))
     - GCC_MULTILIB_GENERATOR=$(eval echo $(grep CT_CC_GCC_MULTILIB_GENERATOR .config | sed 's/.*=//'))
     - python3 "$GCC_CUSTOM_LOCATION/gcc/config/riscv/multilib-generator" $GCC_MULTILIB_GENERATOR > "$GCC_CUSTOM_LOCATION/gcc/config/riscv/t-elf-multilib"
+    # Build with crosstool-NG
     - ct-ng build && BUILD_EXT_CODE=$? || BUILD_EXT_CODE=$?
+    # Cleanup + Prepare Artifact
     - if [[ $BUILD_EXT_CODE -ne 0 ]]; then CLEAN_EXCLUDE=build.log; else CLEAN_EXCLUDE="$CT_PREFIX/"; fi
     - cp LICENSE "$CT_PREFIX"
     - rm "${CT_PREFIX}/build.log.bz2"
     - rm -r "$CT_PREFIX/include"
+    # Git clean to ensure pristine environment
     - git config --global --add safe.directory "$PWD"
     - git clean -ffdx -e $(echo $CLEAN_EXCLUDE | sed -E 's/\s+/ -e /g')
+    # Handle Failure
     - if [[ $BUILD_EXT_CODE -ne 0 ]]; then (exit $BUILD_EXT_CODE); fi
     # Create archive
     - cd "$CT_PREFIX" && zip -r "$ZIP_NAME" ./ && mv "$ZIP_NAME" .. && cd ..
-    # Start upload to Gitlab Package Registry
+    # Upload to Gitlab Package Registry
     - |
       CURL_RES="$(curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "./$ZIP_NAME" ${PACKAGE_REGISTRY_URL}/${ZIP_NAME})"
     - echo "$CURL_RES"
@@ -163,6 +175,10 @@ linux_riscv64:build:
 
 win_x64:build:
   extends: .build
+  image:
+    name: $WINDOWS_BUILDER_IMAGE
+    docker:
+      user: ctng
   variables:
     ZIP_NAME: "$WIN_X64_ARCHIVE_NAME"
   before_script:
@@ -185,16 +201,16 @@ dockerbuild:
     GIT_STRATEGY: fetch
   <<: *semver_tag_rules
   script:
-    - DOWNLOAD_URL="${PACKAGE_REGISTRY_URL}/${ZIP_NAME}"
+    # Get linux x64 and riscv64 archives
     - |
       curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" "${PACKAGE_REGISTRY_URL}/${LINUX_X64_ARCHIVE_NAME}" -o "${LINUX_X64_ARCHIVE_NAME}"
       curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" "${PACKAGE_REGISTRY_URL}/${LINUX_RISCV64_ARCHIVE_NAME}" -o "${LINUX_RISCV64_ARCHIVE_NAME}"
-    - unzip -d $LINUX_X64_BASE_NAME "${LINUX_X64_ARCHIVE_NAME}"
-    - unzip -d $LINUX_RISCV64_BASE_NAME "${LINUX_RISCV64_ARCHIVE_NAME}"
-    - docker buildx create --name docker-container-builder --driver docker-container --bootstrap --use
-    - docker buildx bake -f docker-bake.hcl
-    - docker buildx use default
-    - docker buildx rm docker-container-builder
+    # Unzip into linux_amd64 and linux_riscv64
+    - mkdir -p linux_amd64 linux_riscv64
+    - unzip -d linux_amd64 "${LINUX_X64_ARCHIVE_NAME}"
+    - unzip -d linux_riscv64 "${LINUX_RISCV64_ARCHIVE_NAME}"
+    # Build multi-arch docker image
+    - docker buildx bake release
 
 
 release:
