@@ -1,6 +1,6 @@
 # RISC-V GNU Toolchain
 
-This repo is meant to statically build and provide the [PULP RISC-V GNU toolchain](https://github.com/pulp-platform/riscv-gnu-toolchain) (licensed under GPLv2 license).
+This repo is meant to statically build and provide the [OpenHW RISC-V GNU toolchain](https://github.com/openhwgroup/corev-gcc.git) (licensed under GPLv2, LGPL-2.1, and GCC RUNTIME v3.1 licenses).
 
 ## Table of Contents
 
@@ -22,8 +22,8 @@ This repo is meant to statically build and provide the [PULP RISC-V GNU toolchai
 
 ## Supported Multi-Lib
 
-- rv32imfcxpulpv2-ilp32f-- (Default)
-- rv32imc_zfinx_xpulpv2-ilp32--
-- rv32imcxpulpv2-ilp32--
+- rv32imfc_xcvalu_xcvbi_xcvbitmanip_xcvelw_xcvhwlp_xcvmac_xcvmem_xcvsimd-ilp32f-- (Default)
+- rv32imc_xcvalu_xcvbi_xcvbitmanip_xcvelw_xcvhwlp_xcvmac_xcvmem_xcvsimd-ilp32--
+- rv32imc_zba_zbb_zbc_zbs-ilp32--
 - rv32imfc-ilp32f--
 - rv32imc-ilp32--

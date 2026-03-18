@@ -8,8 +8,8 @@ variables:
   GIT_SUBMODULE_UPDATE_FLAGS: --force --jobs 4
   DOCKER_DRIVER: overlay2
 
-  TOOLCHAIN_REPO: "https://github.com/pulp-platform/riscv-gnu-toolchain.git"
-  TOOLCHAIN_REF: "master"
+  TOOLCHAIN_REPO: "https://github.com/openhwgroup/corev-gcc.git"
+  TOOLCHAIN_REF: "cv32e40pv2-release"
 
   DOCKER_REPO: "eggtronicengineering/riscv-gnu-toolchain"
   LINUX_BUILDER_IMAGE: "${DOCKER_REPO}:linux-builder"
@@ -114,7 +114,7 @@ clone_tc:
   <<: *semver_tag_rules
   script:
     # Move toolchain content to current directory
-    - mv toolchain/** . && rm -rf toolchain
+    - cp -a toolchain/. . && rm -rf toolchain
     # Inject Config Tweaks
     - >
       grep -w CT_LOG_PROGRESS_BAR "$DEFCONFIG"
@@ -127,11 +127,11 @@ clone_tc:
     - python3 "$GCC_CUSTOM_LOCATION/gcc/config/riscv/multilib-generator" $GCC_MULTILIB_GENERATOR > "$GCC_CUSTOM_LOCATION/gcc/config/riscv/t-elf-multilib"
     # Build with crosstool-NG
     - ct-ng build && BUILD_EXT_CODE=$? || BUILD_EXT_CODE=$?
-    # Cleanup + Prepare Artifact
+    # Cleanup + Prepare Artifact + Copy licenses
     - if [[ $BUILD_EXT_CODE -ne 0 ]]; then CLEAN_EXCLUDE=build.log; else CLEAN_EXCLUDE="$CT_PREFIX/"; fi
-    - cp LICENSE "$CT_PREFIX"
-    - rm "${CT_PREFIX}/build.log.bz2"
-    - rm -r "$CT_PREFIX/include"
+    - cp COPYING* ABOUT-NLS MAINTAINERS "$CT_PREFIX/" 2>/dev/null || true
+    - rm -f "${CT_PREFIX}/build.log.bz2"
+    - rm -rf "$CT_PREFIX/include"
     # Git clean to ensure pristine environment
     - git config --global --add safe.directory "$PWD"
     - git clean -ffdx -e $(echo $CLEAN_EXCLUDE | sed -E 's/\s+/ -e /g')
