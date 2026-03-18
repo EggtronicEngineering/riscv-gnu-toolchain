@@ -3,9 +3,6 @@ variables:
   GIT_STRATEGY: clone
   GIT_SUBMODULE_STRATEGY: none
   GIT_SUBMODULE_FORCE_HTTPS: "true"
-  GIT_SUBMODULE_PATHS: ":(exclude)riscv-glibc :(exclude)riscv-dejagnu :(exclude)qemu"
-  GIT_CLEAN_FLAGS: -ffdx
-  GIT_SUBMODULE_UPDATE_FLAGS: --force --jobs 4
   DOCKER_DRIVER: overlay2
 
   GCC_REPO: "https://github.com/openhwgroup/corev-gcc.git"
@@ -91,6 +88,8 @@ clone_tc:
     GIT_STRATEGY: none
   <<: *semver_tag_rules
   script:
+    # 0. Defensive cleanup: Wipe out any leftover folders from previous failed retries (needed because of `GIT_STRATEGY: none`)
+    - rm -rf riscv-gcc riscv-binutils riscv-gdb riscv-newlib
     # 1. Clone OpenHW GCC exactly where Crosstool-NG expects it
     - git clone --depth 1 --single-branch "$GCC_REPO" -b "$TOOLCHAIN_REF" riscv-gcc
     # 2. Clone OpenHW Binutils (CRITICAL: The Assembler MUST understand cv.mac)
@@ -142,13 +141,10 @@ clone_tc:
     - cp riscv-gcc/COPYING* riscv-gcc/ABOUT-NLS riscv-gcc/MAINTAINERS "$CT_PREFIX/" 2>/dev/null || true
     - rm -f "${CT_PREFIX}/build.log.bz2"
     - rm -rf "$CT_PREFIX/include"
-    # Git clean to ensure pristine environment
-    - git config --global --add safe.directory "$PWD"
-    - git clean -ffdx -e $(echo $CLEAN_EXCLUDE | sed -E 's/\s+/ -e /g')
     # Handle Failure
     - if [[ $BUILD_EXT_CODE -ne 0 ]]; then (exit $BUILD_EXT_CODE); fi
     # Create archive
-    - cd "$CT_PREFIX" && zip -r "$ZIP_NAME" ./ && mv "$ZIP_NAME" .. && cd ..
+    - cd "$CT_PREFIX" && zip -rq "../${ZIP_NAME}" . && cd ..
     # Upload to Gitlab Package Registry
     - |
       CURL_RES="$(curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "./$ZIP_NAME" ${PACKAGE_REGISTRY_URL}/${ZIP_NAME})"
