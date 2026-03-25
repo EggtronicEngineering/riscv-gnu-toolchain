@@ -3,13 +3,12 @@ variables:
   GIT_STRATEGY: clone
   GIT_SUBMODULE_STRATEGY: none
   GIT_SUBMODULE_FORCE_HTTPS: "true"
-  GIT_SUBMODULE_PATHS: ":(exclude)riscv-glibc :(exclude)riscv-dejagnu :(exclude)qemu"
-  GIT_CLEAN_FLAGS: -ffdx
-  GIT_SUBMODULE_UPDATE_FLAGS: --force --jobs 4
   DOCKER_DRIVER: overlay2
 
-  TOOLCHAIN_REPO: "https://github.com/pulp-platform/riscv-gnu-toolchain.git"
-  TOOLCHAIN_REF: "master"
+  GCC_REPO: "https://github.com/openhwgroup/corev-gcc.git"
+  BINUTILS_REPO: "https://github.com/openhwgroup/corev-binutils-gdb.git"
+  TOOLCHAIN_REF: "cv32e40pv2-release"
+  NEWLIB_REPO: "https://sourceware.org/git/newlib-cygwin.git"
 
   DOCKER_REPO: "eggtronicengineering/riscv-gnu-toolchain"
   LINUX_BUILDER_IMAGE: "${DOCKER_REPO}:linux-builder"
@@ -89,11 +88,23 @@ clone_tc:
     GIT_STRATEGY: none
   <<: *semver_tag_rules
   script:
-    - git clone --recurse-submodules --single-branch "$TOOLCHAIN_REPO" -b "$TOOLCHAIN_REF" toolchain
-    - rm -rf toolchain/.git
+    # 0. Defensive cleanup: Wipe out any leftover folders from previous failed retries (needed because of `GIT_STRATEGY: none`)
+    - rm -rf riscv-gcc riscv-binutils riscv-gdb riscv-newlib
+    # 1. Clone OpenHW GCC exactly where Crosstool-NG expects it
+    - git clone --depth 1 --single-branch "$GCC_REPO" -b "$TOOLCHAIN_REF" riscv-gcc
+    # 2. Clone OpenHW Binutils (CRITICAL: The Assembler MUST understand cv.mac)
+    - git clone --depth 1 --single-branch "$BINUTILS_REPO" -b "$TOOLCHAIN_REF" riscv-binutils
+    - cp -a riscv-binutils riscv-gdb
+    # 3. Clone standard Newlib (Expected by your config)
+    - git clone --depth 1 --single-branch "$NEWLIB_REPO" riscv-newlib
+    # Cleanup git metadata to save CI artifact space
+    - rm -rf riscv-gcc/.git riscv-binutils/.git riscv-gdb/.git riscv-newlib/.git
   artifacts:
     paths:
-      - toolchain
+      - riscv-gcc
+      - riscv-binutils
+      - riscv-gdb
+      - riscv-newlib
     expire_in: 1 day
     when: always
   tags:
@@ -113,8 +124,6 @@ clone_tc:
     ZIP_NAME: ""
   <<: *semver_tag_rules
   script:
-    # Move toolchain content to current directory
-    - mv toolchain/** . && rm -rf toolchain
     # Inject Config Tweaks
     - >
       grep -w CT_LOG_PROGRESS_BAR "$DEFCONFIG"
@@ -127,18 +136,15 @@ clone_tc:
     - python3 "$GCC_CUSTOM_LOCATION/gcc/config/riscv/multilib-generator" $GCC_MULTILIB_GENERATOR > "$GCC_CUSTOM_LOCATION/gcc/config/riscv/t-elf-multilib"
     # Build with crosstool-NG
     - ct-ng build && BUILD_EXT_CODE=$? || BUILD_EXT_CODE=$?
-    # Cleanup + Prepare Artifact
+    # Cleanup + Prepare Artifact + Copy licenses
     - if [[ $BUILD_EXT_CODE -ne 0 ]]; then CLEAN_EXCLUDE=build.log; else CLEAN_EXCLUDE="$CT_PREFIX/"; fi
-    - cp LICENSE "$CT_PREFIX"
-    - rm "${CT_PREFIX}/build.log.bz2"
-    - rm -r "$CT_PREFIX/include"
-    # Git clean to ensure pristine environment
-    - git config --global --add safe.directory "$PWD"
-    - git clean -ffdx -e $(echo $CLEAN_EXCLUDE | sed -E 's/\s+/ -e /g')
+    - cp riscv-gcc/COPYING* riscv-gcc/ABOUT-NLS riscv-gcc/MAINTAINERS "$CT_PREFIX/" 2>/dev/null || true
+    - rm -f "${CT_PREFIX}/build.log.bz2"
+    - rm -rf "$CT_PREFIX/include"
     # Handle Failure
     - if [[ $BUILD_EXT_CODE -ne 0 ]]; then (exit $BUILD_EXT_CODE); fi
     # Create archive
-    - cd "$CT_PREFIX" && zip -r "$ZIP_NAME" ./ && mv "$ZIP_NAME" .. && cd ..
+    - cd "$CT_PREFIX" && zip -rq "../${ZIP_NAME}" . && cd ..
     # Upload to Gitlab Package Registry
     - |
       CURL_RES="$(curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "./$ZIP_NAME" ${PACKAGE_REGISTRY_URL}/${ZIP_NAME})"
@@ -218,7 +224,7 @@ release:
   image: $RELEASE_IMAGE
   variables:
     GIT_STRATEGY: none
-    RELEASE_TITLE: "RiscV GNU Toolchain ${CI_COMMIT_TAG} (from PULP)"
+    RELEASE_TITLE: "RiscV GCC Toolchain ${CI_COMMIT_TAG} (from OpenHW Group)"
   <<: *semver_tag_rules
   script:
     - |
