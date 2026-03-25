@@ -224,7 +224,7 @@ release:
   image: $RELEASE_IMAGE
   variables:
     GIT_STRATEGY: none
-    RELEASE_TITLE: "RiscV GNU Toolchain ${CI_COMMIT_TAG} (from PULP)"
+    RELEASE_TITLE: "RiscV GCC Toolchain ${CI_COMMIT_TAG} (from OpenHW Group)"
   <<: *semver_tag_rules
   script:
     - |
