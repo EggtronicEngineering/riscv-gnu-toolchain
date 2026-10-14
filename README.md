@@ -22,9 +22,10 @@ This repo is meant to statically build and provide the [OpenHW RISC-V GNU toolch
 
 ## Supported Multi-Lib
 
-- rv32imc_zicntr_zicsr_zifencei_zfinx_xcvalu_xcvbi_xcvbitmanip_xcvelw_xcvmac_xcvmem_xcvsimd-ilp32-- (default)
-- rv32imfc_zicntr_zicsr_zifencei_xcvalu_xcvbi_xcvbitmanip_xcvelw_xcvmac_xcvmem_xcvsimd-ilp32f--
-- rv32imc_zicntr_zicsr_zifencei_xcvalu_xcvbi_xcvbitmanip_xcvelw_xcvmac_xcvmem_xcvsimd-ilp32--
+- rv32imc_zicntr_zicsr_zifencei_zfinx_xcvalu_xcvbi_xcvbitmanip_xcvmac_xcvmem_xcvsimd-ilp32-- (default)
+- rv32imfc_zicntr_zicsr_zifencei_xcvalu_xcvbi_xcvbitmanip_xcvmac_xcvmem_xcvsimd-ilp32f--
+- rv32imc_zicntr_zicsr_zifencei_xcvalu_xcvbi_xcvbitmanip_xcvmac_xcvmem_xcvsimd-ilp32--
 - rv32imc_zicntr_zicsr_zifencei_zba_zbb_zbs-ilp32--
-- rv32imfc-ilp32f--
-- rv32imc-ilp32--
+- rv32imfc_zicntr_zicsr_zifencei-ilp32f--
+- rv32imc_zicntr_zicsr_zifencei_zfinx-ilp32--
+- rv32imc_zicntr_zicsr_zifencei-ilp32--
