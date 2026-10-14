@@ -63,7 +63,7 @@ stages:
     - docker buildx use default
     - docker --config "$DOCKER_CONFIG" buildx rm $BUILDER_NAME --force || true
   tags:
-    - shell
+    - shell-heavy
 
 
 setup:
@@ -108,7 +108,7 @@ clone_tc:
     expire_in: 1 day
     when: always
   tags:
-    - docker
+    - docker-heavy
 
 
 .build:
@@ -158,7 +158,7 @@ clone_tc:
   dependencies:
     - clone_tc
   tags:
-    - docker
+    - docker-heavy
 
 linux_x64:build:
   extends: .build
@@ -248,7 +248,7 @@ release:
           link_type: 'package'
   dependencies: []
   tags:
-    - docker
+    - docker-heavy
 
 
 github_release:
@@ -302,4 +302,4 @@ github_release:
     - linux_riscv64:build
     - win_x64:build
   tags:
-    - docker
+    - docker-heavy
